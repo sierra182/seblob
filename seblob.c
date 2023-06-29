@@ -1,18 +1,167 @@
 #include <SDL.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define ROWS 100
 #define COLS 150
 #define CELL_SIZE 5
 
-typedef struct {
+typedef struct Cell {
+
+    struct Cell* leftChild;
+    struct Cell* middleChild;
+    struct Cell* rightChild;
+
+    int mana;
+    int cellDepth;
+    int veinDepth;
 
     bool isAlive;
     bool isAliveNextState; 
     SDL_Rect destRect;
 
 } Cell;
+
+void createNewNode(Cell* cell) {
+    
+    Cell* leftChild = calloc(1, sizeof(Cell));
+    Cell* middleChild = calloc(1, sizeof(Cell));
+    Cell* rightChild = calloc(1, sizeof(Cell));
+
+    if (leftChild == NULL || middleChild == NULL || rightChild == NULL) {
+
+        disposeAll();
+        exit(1);
+    }
+     
+    cell->leftChild = leftChild; 
+    cell->middleChild = middleChild;
+    cell->rightChild = rightChild; 
+
+    leftChild->cellDepth = 0;
+    middleChild->cellDepth = cell->cellDepth + 1;
+    rightChild->cellDepth = 0;
+
+    leftChild->veinDepth = cell->veinDepth + 1;
+    middleChild->veinDepth = cell->veinDepth;
+    rightChild->veinDepth = cell->veinDepth + 1;
+
+    builder(cell->leftChild);
+    builder(cell->middleChild);
+    builder(cell->rightChild);
+}
+
+void createNewCell(Cell* cell) {
+     
+    Cell* middleChild = calloc(1, sizeof(Cell));
+
+    if (middleChild == NULL) {
+
+        disposeAll();
+        exit(1);
+    }
+    
+    cell->middleChild = middleChild; 
+    middleChild->cellDepth = cell->cellDepth + 1;
+    middleChild->veinDepth = cell->veinDepth;
+
+    SDL_Rect middleChildDestRect = cell->destRect;
+    middleChildDestRect.y += CELL_SIZE;    
+    middleChild->destRect = middleChildDestRect; 
+    
+    builder(cell->middleChild);  
+}
+
+int isInteger(float num) {
+
+    int intPart = (int) num;
+
+    if (num - intPart == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+void builder(Cell* cell) {
+    
+   int gap = 3.0; 
+   int cellMaxDepth = 100;
+
+   if (cell->veinDepth < 3) {
+
+        if (cell->cellDepth != 0 && isInteger(cell->cellDepth / gap)) {
+
+            createNewNode(cell);
+        }
+        else if (cell->cellDepth < cellMaxDepth) {
+            createNewCell(cell);
+        }    
+    }       
+}
+
+void cellLifeCycle() {
+
+    Cell* mother = calloc(1, sizeof(Cell));
+    builder(mother);   
+}
+
+void getOppositeSide(const int localRaw, const int localCol, const int raw, const int col, const int* oppRaw, const int* oppCol) {
+
+    if (localRaw == 0 && localCol == 1) {
+
+        oppRaw = raw + 2;
+        oppCol = col; 
+    }
+    else if (localRaw == 2 && localCol == 1) {
+
+        oppRaw = raw - 2;
+        oppCol = col;
+    }
+    else if (localCol == 0 && localRaw == 1){
+        
+        oppCol = col + 2;
+        oppRaw = raw;
+    }
+    else if (localCol == 2 && localRaw == 1){
+        
+        oppCol = col - 2;
+        oppRaw = raw;
+    }
+}
+
+void submitBlobRules(Cell matrix[ROWS][COLS]) {
+
+    for (int i = 0; i < ROWS; i++) {
+
+        for (int j = 0; j < COLS; j++) {
+
+            int aliveCount = 0;
+            int nighCellOppRaw = 0;
+            int nighCellOppCol = 0;
+
+            for (int k = 0, l = i - 1; k < 3; k++, l++) {    
+
+                for (int m = 0, n = j - 1; m < 3; m++, n++) {
+                        
+                    if (!(k == 1 && m == 1 || l < 0 || n < 0 || l > ROWS - 1 || n > COLS - 1)) {
+                            
+                        if (matrix[l][n].isAlive) {
+                            
+                            aliveCount++; 
+                            getOppositeSide(k, m, l, n, &nighCellOppRaw, &nighCellOppCol);                                              
+                        }                                                   
+                    }       
+                }                                  
+            }
+
+            if (aliveCount == 1) {
+
+                matrix[nighCellOppRaw][nighCellOppCol].isAliveNextState = true;
+            }
+        }
+    }
+}
 
 void actualizeNextState(Cell matrix[ROWS][COLS]) {
 
@@ -68,7 +217,7 @@ int initWindow(SDL_Window** window, SDL_Renderer** renderer, int width, int heig
         return 1;
     }
 
-    *window = SDL_CreateWindow("Life",
+    *window = SDL_CreateWindow("SeBlob",
                               SDL_WINDOWPOS_UNDEFINED,
                               SDL_WINDOWPOS_UNDEFINED,
                               width,
@@ -99,8 +248,8 @@ int SDL_main(int argc, char* argv[]) {
  	SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;
    
-    int windowWidth = COLS * CELL_SIZE;
-    int windowHeight = ROWS * CELL_SIZE;
+    const int windowWidth = COLS * CELL_SIZE;
+    const int windowHeight = ROWS * CELL_SIZE;
     
     if (initWindow(&window, &renderer, windowWidth, windowHeight)) {
        	return 1;
